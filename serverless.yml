@@ -1,0 +1,93 @@
+org: jdcpham
+app: john-pham-api
+service: music
+frameworkVersion: '3'
+provider:
+  name: aws
+  runtime: python3.8
+  profile: personal
+  stage: ${opt:stage, 'development'}
+  memorySize: 512
+  timeout: 30
+  region: eu-west-1
+  apiGateway:
+    restApiId:
+      'Fn::ImportValue': John-Pham-API-Gateway-Rest-ID-${self:custom.environments.capital.${self:provider.stage}}
+    restApiRootResourceId:
+      'Fn::ImportValue': John-Pham-API-Gateway-Root-Resource-ID-${self:custom.environments.capital.${self:provider.stage}}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "secretsmanager:GetSecretValue"
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - s3:*
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - ses:SendTemplatedEmail
+      Resource: "*"
+
+functions:
+  recently-played:
+    handler: handlers.music.recently_played_tracks
+    events:
+      - schedule: ${self:custom.frequent_update_schedule.${self:provider.stage}} 
+      - http:
+          path: /music/recently-played
+          method: GET
+          cors: true
+    layers:
+      - Ref: PythonRequirementsLambdaLayer
+    environment:
+      STAGE: ${self:provider.stage}
+  search-track:
+    handler: handlers.music.search_track
+    events:
+      - http:
+          path: /music/search/track
+          method: GET
+          cors: true
+    layers:
+      - Ref: PythonRequirementsLambdaLayer
+    environment:
+      STAGE: ${self:provider.stage}
+
+package:
+  exclude:
+    - "**"
+  include:
+    - "./handlers/**"
+    - "./utils/**"
+
+plugins: 
+  - serverless-python-requirements
+  - serverless-offline
+
+custom:
+  environments:
+    upper:
+      development: DEVELOPMENT
+      staging: STAGING
+      production: PRODUCTION
+    capital:
+      development: Development
+      staging: Staging
+      production: Production
+  frequent_update_schedule:
+    development: rate(1 hour)
+    staging: rate(1 day)
+    production: rate(5 minutes)
+  pythonRequirements:
+    pythonBin: python
+    dockerizePip: non-linux
+    slim: true
+    layer:
+      name: ${self:service}-python-requirements
+      description: Python Requirements Lambda Layer
+      compatibleRuntimes:
+        - python3.8
+      licenseInfo: GPLv3
+      allowedAccounts:
+        - '*'
