@@ -1,11 +1,10 @@
 org: jdcpham
 app: john-pham-api
-service: music
+service: movies
 frameworkVersion: '3'
 provider:
   name: aws
-  runtime: python3.8
-  profile: personal
+  runtime: python3.11
   stage: ${opt:stage, 'development'}
   memorySize: 512
   timeout: 30
@@ -28,25 +27,52 @@ provider:
       Action:
         - ses:SendTemplatedEmail
       Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - s3:*
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - dynamodb:*
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - logs:*
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - ses:SendTemplatedEmail
+      Resource: "*"
 
 functions:
-  recently-played:
-    handler: handlers.music.recently_played_tracks
+  add_watched:
+    handler: handlers.watched.post
+    events:
+      - http:
+          path: /movie/watched
+          method: POST
+          cors: true
+    layers:
+      - Ref: PythonRequirementsLambdaLayer
+    environment:
+      STAGE: ${self:provider.stage}
+  recently_watched:
+    handler: handlers.watched.get
     events:
       - schedule: ${self:custom.frequent_update_schedule.${self:provider.stage}} 
       - http:
-          path: /music/recently-played
+          path: /movies/watched
           method: GET
           cors: true
     layers:
       - Ref: PythonRequirementsLambdaLayer
     environment:
       STAGE: ${self:provider.stage}
-  search-track:
-    handler: handlers.music.search_track
+  search:
+    handler: handlers.search.get
     events:
       - http:
-          path: /music/search/track
+          path: /movies/search
           method: GET
           cors: true
     layers:
@@ -79,6 +105,10 @@ custom:
     development: rate(1 hour)
     staging: rate(1 day)
     production: rate(5 minutes)
+  daily_update_schedule:
+    development: rate(7 days)
+    staging: rate(7 days)
+    production: rate(1 day)
   pythonRequirements:
     pythonBin: python
     dockerizePip: non-linux
@@ -87,7 +117,7 @@ custom:
       name: ${self:service}-python-requirements
       description: Python Requirements Lambda Layer
       compatibleRuntimes:
-        - python3.8
+        - python3.11
       licenseInfo: GPLv3
       allowedAccounts:
         - '*'
